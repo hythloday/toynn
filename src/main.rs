@@ -1,6 +1,4 @@
-use ndarray::{arr2, azip, Array2};
-use ndarray_rand::rand_distr::Uniform;
-use ndarray_rand::RandomExt;
+use ndarray::{arr2, Array2};
 
 #[derive(Debug)]
 struct NeuralNetwork {
@@ -26,6 +24,9 @@ pub fn d_sigmoid(z: &f64) -> f64 {
 
 impl NeuralNetwork {
     pub fn new(x: &Array2<f64>, y: &Array2<f64>) -> NeuralNetwork {
+        use ndarray_rand::rand_distr::Uniform;
+        use ndarray_rand::RandomExt;
+
         NeuralNetwork {
             input: x.clone(),
             weights1: Array2::random((x.dim().1, 4), Uniform::new(0., 1.)),
@@ -47,12 +48,12 @@ impl NeuralNetwork {
         weights2 += = self.layer1.T . loss
     */
     pub fn bp(self: &mut Self) {
-        let mut loss = Array2::zeros(self.y.dim());
-        azip!((l in &mut loss, y in &self.y, o in &self.output) *l = 2. * (y - o) * d_sigmoid(o));
-        azip!((w in &mut self.weights2, d in &self.layer1.t().dot(&loss)) *w += d);
-        let mut chain = Array2::zeros(self.layer1.dim());
-        azip!((c in &mut chain, a in &loss.dot(&self.weights2.t()), b in &self.layer1) *c = a * d_sigmoid(b));
-        azip!((w in &mut self.weights1, d in &self.input.t().dot(&chain)) *w += d);
+        let loss = 2. * (&self.y - &self.output) * self.output.map(d_sigmoid);
+
+        self.weights1 = &self.weights1 + &self.input.t().dot(&(&
+            loss.dot(&self.weights2.t()) * &self.layer1.map(d_sigmoid))
+        );
+        self.weights2 = &self.weights2 + &self.layer1.t().dot(&loss);
     }
 }
 
