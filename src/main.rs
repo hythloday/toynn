@@ -1,29 +1,37 @@
 use ndarray::{arr2, Array2};
+use derivative::Derivative;
 
-#[derive(Debug)]
-struct NeuralNetwork {
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct NeuralNetwork<'phi> {
     input: Array2<f64>,
     weights1: Array2<f64>,
     layer1: Array2<f64>,
     weights2: Array2<f64>,
     y: Array2<f64>,
     output: Array2<f64>,
+    #[derivative(Debug="ignore")]
+    phi: &'phi ActivationFunction,
 }
 
-// sigmoid function.
-pub fn sigmoid(z: &f64) -> f64 {
-    use std::f64::consts::E;
-    1. / (1. + E.powf(-z))
+struct ActivationFunction {
+    apply: fn(&f64) -> f64,
+    derivative: fn(&f64) -> f64,
 }
 
-// derivative of the sigmoid function
-pub fn d_sigmoid(z: &f64) -> f64 {
-    use std::f64::consts::E;
-    E.powf(-z) / (1. + E.powf(-z)).powf(2.)
-}
+static SIGMA: ActivationFunction = ActivationFunction {
+    apply: |z| -> f64 {
+        use std::f64::consts::E;
+        1. / (1. + E.powf(-z))
+    },
+    derivative: |z| -> f64 {
+        use std::f64::consts::E;
+        E.powf(-z) / (1. + E.powf(-z)).powf(2.)
+    }
+};
 
-impl NeuralNetwork {
-    pub fn new(x: &Array2<f64>, y: &Array2<f64>) -> NeuralNetwork {
+impl NeuralNetwork<'_> {
+    pub fn new<'phi>(x: &Array2<f64>, y: &Array2<f64>, phi: &'phi ActivationFunction) -> NeuralNetwork<'phi> {
         use ndarray_rand::rand_distr::Uniform;
         use ndarray_rand::RandomExt;
 
@@ -34,26 +42,27 @@ impl NeuralNetwork {
             weights2: Array2::random((4, 1), Uniform::new(0., 1.)),
             y: y.clone(),
             output: Array2::zeros(y.dim()),
+            phi: &phi
         }
     }
 
     pub fn ff(self: &mut Self) {
-        self.layer1 = self.input.dot(&self.weights1).map(sigmoid);
-        self.output = self.layer1.dot(&self.weights2).map(sigmoid);
+        self.layer1 = self.input.dot(&self.weights1).map(self.phi.apply);
+        self.output = self.layer1.dot(&self.weights2).map(self.phi.apply);
     }
 
     /*
-        loss = 2 * (y-output) * d_sig(output)
-        weights1 += self.input.T . ((loss . self.weights2.T) * d_sig(layer1))
-        weights2 += = self.layer1.T . loss
+        d_loss = 2 * (y-output) * d_sig(output)
+        weights1 += self.input.T . ((d_loss . self.weights2.T) * d_sig(layer1))
+        weights2 += = self.layer1.T . d_loss
     */
     pub fn bp(self: &mut Self) {
-        let loss = 2. * (&self.y - &self.output) * self.output.map(d_sigmoid);
+        let d_loss = 2. * (&self.y - &self.output) * self.output.map(self.phi.derivative);
 
         self.weights1 = &self.weights1 + &self.input.t().dot(&(&
-            loss.dot(&self.weights2.t()) * &self.layer1.map(d_sigmoid))
+            d_loss.dot(&self.weights2.t()) * &self.layer1.map(self.phi.derivative))
         );
-        self.weights2 = &self.weights2 + &self.layer1.t().dot(&loss);
+        self.weights2 = &self.weights2 + &self.layer1.t().dot(&d_loss);
     }
 }
 
@@ -66,7 +75,7 @@ fn main() {
         [1., 1., 1.]
     ]);
     let y = arr2(&[[0.], [1.], [1.], [0.]]);
-    let mut nn = NeuralNetwork::new(&input, &y);
+    let mut nn = NeuralNetwork::new(&input, &y, &SIGMA);
     for _ in 0..1500 {
         nn.ff();
         nn.bp();
