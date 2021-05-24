@@ -29,6 +29,14 @@ pub static SIGMA: ActivationFunction = ActivationFunction {
     }
 };
 
+pub static RELU: ActivationFunction = ActivationFunction {
+    apply: |z| z.max(0.),
+    derivative: |z| {
+        if z <= &0. { 0. }
+        else { 1. }
+    }
+};
+
 impl NeuralNetwork<'_> {
     pub fn new<'phi>(x: &Array2<f64>, y: &Array2<f64>, phi: &'phi ActivationFunction) -> NeuralNetwork<'phi> {
         use ndarray_rand::rand_distr::Uniform;
