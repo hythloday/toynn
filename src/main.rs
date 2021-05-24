@@ -2,7 +2,7 @@ use ndarray::{arr2, Array2};
 use derivative::Derivative;
 
 #[derive(Derivative)]
-#[derivative(Debug)]
+#[derivative(Debug, Clone)]
 struct NeuralNetwork<'phi> {
     input: Array2<f64>,
     weights1: Array2<f64>,
@@ -14,19 +14,18 @@ struct NeuralNetwork<'phi> {
     phi: &'phi ActivationFunction,
 }
 
-struct ActivationFunction {
+pub struct ActivationFunction {
     apply: fn(&f64) -> f64,
     derivative: fn(&f64) -> f64,
 }
 
-static SIGMA: ActivationFunction = ActivationFunction {
+pub static SIGMA: ActivationFunction = ActivationFunction {
     apply: |z| -> f64 {
         use std::f64::consts::E;
         1. / (1. + E.powf(-z))
     },
     derivative: |z| -> f64 {
-        use std::f64::consts::E;
-        E.powf(-z) / (1. + E.powf(-z)).powf(2.)
+        z * (1. - z)
     }
 };
 
@@ -59,14 +58,17 @@ impl NeuralNetwork<'_> {
     pub fn bp(self: &mut Self) {
         let d_loss = 2. * (&self.y - &self.output) * self.output.map(self.phi.derivative);
 
-        self.weights1 = &self.weights1 + &self.input.t().dot(&(&
-            d_loss.dot(&self.weights2.t()) * &self.layer1.map(self.phi.derivative))
+        let d_weights2 = self.layer1.t().dot(&d_loss);
+        let d_weights1 = self.input.t().dot(&(&
+            (d_loss.dot(&self.weights2.t())) * &self.layer1.map(self.phi.derivative))
         );
-        self.weights2 = &self.weights2 + &self.layer1.t().dot(&d_loss);
+
+        self.weights1 += &d_weights1;
+        self.weights2 += &d_weights2;
     }
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     #[rustfmt::skip]
     let input = arr2(&[
         [0., 0., 1.],
@@ -76,9 +78,12 @@ fn main() {
     ]);
     let y = arr2(&[[0.], [1.], [1.], [0.]]);
     let mut nn = NeuralNetwork::new(&input, &y, &SIGMA);
+
     for _ in 0..1500 {
         nn.ff();
         nn.bp();
     }
-    println!("{:?}", nn.output);
+    println!("{}", nn.output.t().row(0));
+
+    Ok(())
 }
